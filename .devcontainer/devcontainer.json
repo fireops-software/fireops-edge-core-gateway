@@ -1,0 +1,15 @@
+{
+    "name": "FireOps Edge Dashboard",
+    "build": {
+      "dockerfile": "./Dockerfile"
+    },
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "golang.go",
+          "gruntfuggly.todo-tree"
+        ]
+      }
+    }
+  }
+  

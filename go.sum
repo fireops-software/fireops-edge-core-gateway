@@ -1,0 +1,6 @@
+github.com/rabbitmq/amqp091-go v1.10.0 h1:STpn5XsHlHGcecLmMFCtg7mqq0RnD+zFr4uzukfVhBw=
+github.com/rabbitmq/amqp091-go v1.10.0/go.mod h1:Hy4jKW5kQART1u+JkDTF9YYOQUHXqMuhrgxOEeS7G4o=
+github.com/uoul/go-common v0.2.0 h1:CREtCLI37fDZ6n2S4DPeepM49hsL13NOwtGstZIqwwI=
+github.com/uoul/go-common v0.2.0/go.mod h1:sv5CJVgbw4b0DQLxW+oRrIdLKlwSUSNhFp/mH8V9pus=
+golang.org/x/sys v0.33.0 h1:q3i8TbbEz+JRD9ywIRlyRAQbM0qF7hu24q3teo2hbuw=
+golang.org/x/sys v0.33.0/go.mod h1:BJP2sWEmIv4KK5OTEluFJCKSidICx8ciO85XgH3Ak8k=
