@@ -45,11 +45,39 @@ func main() {
 		cp.StringOrDefault("FIREOPS_TOKEN", ""),
 	)
 	// Run CoreGateway
+	alertsExchangeName := cp.StringOrDefault("RABBITMQ_EVENTS_EXCHANGE", "fireops-edge-events")
 	services.NewCoreGateway(
 		ctx,
 		logger,
 		rabbitMq,
 		fireopsCoreApi,
+		messaging.RabbitMqExchange{
+			Type:       "topic",
+			Exchange:   alertsExchangeName,
+			RoutingKey: cp.StringOrDefault("RABBITMQ_ALU2G_ACTIVE_ROUTINGKEY", "alu2g.active"),
+		},
+		messaging.RabbitMqExchange{
+			Type:       "topic",
+			Exchange:   alertsExchangeName,
+			RoutingKey: cp.StringOrDefault("RABBITMQ_ACTIVE_ROUTINGKEY", "active"),
+		},
+		messaging.RabbitMqExchange{
+			Type:       "topic",
+			Exchange:   cp.StringOrDefault("RABBITMQ_UNITS_EXCHANGE", "fireops-edge-units"),
+			RoutingKey: cp.StringOrDefault("RABBITMQ_UNITS_ROUTINGKEY", ""),
+		},
+	)
+	// Run CoreNotifier
+	services.NewCoreNotifier(
+		ctx,
+		logger,
+		rabbitMq,
+		fireopsCoreApi,
+		messaging.RabbitMqExchange{
+			Type:       "topic",
+			Exchange:   alertsExchangeName,
+			RoutingKey: cp.StringOrDefault("RABBITMQ_ALU2G_NEW_ROUTINGKEY", "alu2g.new"),
+		},
 	)
 	// Show run message
 	logger.Info("Running...")
