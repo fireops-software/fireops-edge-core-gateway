@@ -12,6 +12,7 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/uoul/go-common/async"
 	"github.com/uoul/go-common/collections"
+	"github.com/uoul/go-common/health"
 	"github.com/uoul/go-common/log"
 	"github.com/uoul/go-common/messaging"
 )
@@ -152,6 +153,14 @@ func NewCoreGateway(
 	for _, o := range opts {
 		o(cg)
 	}
+	// Register healthcheck
+	health.GetHealthMonitor().RegisterReadynessCheck("fireops-core-api", func() error {
+		if time.Since(cg.lastSuccessfullPoll) > 2*cg.fireopsPollInterval {
+			return appError.NewErrFireOpsApi("fireops-core-api not ready")
+		}
+		return nil
+	})
+	// Run service
 	go func() {
 		for {
 			err := cg.run()

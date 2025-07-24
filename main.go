@@ -79,6 +79,18 @@ func main() {
 			RoutingKey: cp.StringOrDefault("RABBITMQ_ALU2G_NEW_ROUTINGKEY", "alu2g.new"),
 		},
 	)
+	// Run HealthReporter
+	services.NewHealthReporter(
+		ctx,
+		logger,
+		rabbitMq,
+		messaging.RabbitMqExchange{
+			Type:       "topic",
+			Exchange:   cp.StringOrDefault("RABBITMQ_HEALTH_EXCHANGE", "fireops-edge-health"),
+			RoutingKey: cp.StringOrDefault("RABBITMQ_HEALTH_ROUTING_KEY", ""),
+		},
+		SERVICE_NAME,
+	)
 	// Show run message
 	logger.Info("Running...")
 	// Wait until stop
