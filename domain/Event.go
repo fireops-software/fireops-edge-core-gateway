@@ -17,7 +17,11 @@ type Event struct {
 	Longitude         *float64 `json:"longitude"`
 	CallerName        *string  `json:"caller_name"`
 	CallerNumber      *string  `json:"caller_number"`
-	UserResponses     struct {
+	Destinations      []struct {
+		Id   uint   `json:"id"`
+		Name string `json:"name"`
+	} `json:"destinations"`
+	UserResponses struct {
 		Accepted []string `json:"accepted"`
 		Declined []string `json:"declined"`
 	} `json:"user_responses"`
