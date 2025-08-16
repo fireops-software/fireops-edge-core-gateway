@@ -112,7 +112,9 @@ func (c *CoreGateway) notifyEvents() error {
 	// Merge events
 	events := append([]domain.Event{}, c.coreCache...)
 	for _, alu2gEvent := range c.alu2gCache {
-		if !collections.ContainsSlice(events, func(coreEvent domain.Event) bool { return coreEvent.Num1 == alu2gEvent.Num1 }) {
+		if !collections.ContainsSlice(events, func(coreEvent domain.Event) bool {
+			return coreEvent.Num1 != nil && alu2gEvent.Num1 != nil && *coreEvent.Num1 == *alu2gEvent.Num1
+		}) {
 			events = append(events, alu2gEvent)
 		}
 	}
