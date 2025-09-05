@@ -141,7 +141,7 @@ func (f *FireOpsCoreApi) SendEvents(events []domain.Event) chan async.ActionResu
 
 func (f *FireOpsCoreApi) doRequest(req *http.Request) (*http.Response, error) {
 	// Add Headers
-	req.Header.Add("Accept", `application/json`)
+	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", f.apiToken))
 	// Do request
 	return http.DefaultClient.Do(req)
