@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	github.com/rabbitmq/amqp091-go v1.10.0
-	github.com/uoul/go-common v0.3.8
+	github.com/uoul/go-common v0.3.9
 )
 
 require (
