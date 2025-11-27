@@ -21,7 +21,7 @@ import (
 // Types
 //--------------------------------------------------------------------------------------------
 
-type CoreGateway struct {
+type CoreEventGateway struct {
 	ctx                context.Context
 	logger             log.ILogger
 	rabbitMq           messaging.IMessenger[messaging.RabbitMqExchange, amqp091.Delivery]
@@ -46,7 +46,7 @@ type CoreGateway struct {
 // Private
 //--------------------------------------------------------------------------------------------
 
-func (c *CoreGateway) run() error {
+func (c *CoreEventGateway) run() error {
 	// Subscribe alu2g
 	alu2g := c.rabbitMq.Subscribe(c.excahngeAlu2Active)
 	defer c.rabbitMq.Unsubscribe(alu2g)
@@ -64,7 +64,7 @@ func (c *CoreGateway) run() error {
 			}
 		case <-ticker.C:
 			// Request from Core api
-			coreMsg := <-c.fireOpsApi.GetFireDepState()
+			coreMsg := <-c.fireOpsApi.GetFireDepState(c.ctx)
 			// Process message
 			if err := c.processCoreMsg(coreMsg); err != nil {
 				return err
@@ -75,7 +75,7 @@ func (c *CoreGateway) run() error {
 	}
 }
 
-func (c *CoreGateway) processAlu2gMsg(msg async.ActionResult[amqp091.Delivery]) error {
+func (c *CoreEventGateway) processAlu2gMsg(msg async.ActionResult[amqp091.Delivery]) error {
 	// Check if predefined error
 	if msg.Error != nil {
 		return msg.Error
@@ -92,7 +92,7 @@ func (c *CoreGateway) processAlu2gMsg(msg async.ActionResult[amqp091.Delivery]) 
 	return c.notifyEvents()
 }
 
-func (c *CoreGateway) processCoreMsg(msg async.ActionResult[domain.FireDepState]) error {
+func (c *CoreEventGateway) processCoreMsg(msg async.ActionResult[domain.FireDepState]) error {
 	// Check if predefined error
 	if msg.Error != nil {
 		return msg.Error
@@ -108,7 +108,7 @@ func (c *CoreGateway) processCoreMsg(msg async.ActionResult[domain.FireDepState]
 	return c.rabbitMq.Publish(c.exchangeUnits, msg.Result.Units)
 }
 
-func (c *CoreGateway) notifyEvents() error {
+func (c *CoreEventGateway) notifyEvents() error {
 	// Merge events
 	events := append([]domain.Event{}, c.coreCache...)
 	for _, alu2gEvent := range c.alu2gCache {
@@ -126,7 +126,7 @@ func (c *CoreGateway) notifyEvents() error {
 // Constructor
 //--------------------------------------------------------------------------------------------
 
-func NewCoreGateway(
+func NewCoreEventGateway(
 	ctx context.Context,
 	logger log.ILogger,
 	rabbitMq messaging.IMessenger[messaging.RabbitMqExchange, amqp091.Delivery],
@@ -134,9 +134,9 @@ func NewCoreGateway(
 	excahngeAlu2Active messaging.RabbitMqExchange,
 	exchangeActive messaging.RabbitMqExchange,
 	exchangeUnits messaging.RabbitMqExchange,
-	opts ...func(*CoreGateway)) *CoreGateway {
+	opts ...func(*CoreEventGateway)) *CoreEventGateway {
 
-	cg := &CoreGateway{
+	cg := &CoreEventGateway{
 		ctx:                ctx,
 		logger:             logger,
 		rabbitMq:           rabbitMq,

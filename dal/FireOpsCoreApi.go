@@ -30,14 +30,14 @@ type FireOpsCoreApi struct {
 //--------------------------------------------------------------------------------------------
 
 // GetFireDepState implements IFireOpsCoreApi.
-func (f *FireOpsCoreApi) GetFireDepState() chan async.ActionResult[domain.FireDepState] {
+func (f *FireOpsCoreApi) GetFireDepState(ctx context.Context) chan async.ActionResult[domain.FireDepState] {
 	r := make(chan async.ActionResult[domain.FireDepState])
 	go func() {
 		// Create Request context
-		ctx, cancel := context.WithTimeout(context.Background(), f.timeout)
+		rctx, cancel := context.WithTimeout(context.Background(), f.timeout)
 		defer cancel()
 		// Create http request
-		req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/api/v1/edge/user/firedepartment/unitsAndEvents", f.baseUrl), nil)
+		req, err := http.NewRequestWithContext(rctx, "GET", fmt.Sprintf("%s/api/v1/edge/user/firedepartment/unitsAndEvents", f.baseUrl), nil)
 		if err != nil {
 			r <- async.ActionResult[domain.FireDepState]{
 				Error: appError.NewErrInternal("failed to create http request - %v", err),
@@ -85,7 +85,7 @@ func (f *FireOpsCoreApi) GetFireDepState() chan async.ActionResult[domain.FireDe
 }
 
 // SendEvents implements IFireOpsCoreApi.
-func (f *FireOpsCoreApi) SendEvents(events []domain.Event) chan async.ActionResult[any] {
+func (f *FireOpsCoreApi) SendEvents(ctx context.Context, events []domain.Event) chan async.ActionResult[any] {
 	r := make(chan async.ActionResult[any])
 	go func() {
 		// Marshal events
@@ -98,14 +98,14 @@ func (f *FireOpsCoreApi) SendEvents(events []domain.Event) chan async.ActionResu
 			return
 		}
 		// Create Request context
-		ctx, cancel := context.WithTimeout(context.Background(), f.timeout)
+		rctx, cancel := context.WithTimeout(ctx, f.timeout)
 		defer cancel()
 		// Create HTTP request
-		req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/api/v1/edge/new-operation", f.baseUrl), bytes.NewBuffer(body))
+		req, err := http.NewRequestWithContext(rctx, "POST", fmt.Sprintf("%s/api/v1/edge/new-operation", f.baseUrl), bytes.NewBuffer(body))
 		if err != nil {
 			r <- async.ActionResult[any]{
 				Result: nil,
-				Error:  appError.NewErrInternal("failed to create http request - %v", err),
+				Error:  appError.NewErrInternal("failed to create http request for events - %v", err),
 			}
 			return
 		}
@@ -114,7 +114,7 @@ func (f *FireOpsCoreApi) SendEvents(events []domain.Event) chan async.ActionResu
 		if err != nil {
 			r <- async.ActionResult[any]{
 				Result: nil,
-				Error:  appError.NewErrFireOpsApi("failed to perform http request - %v", err),
+				Error:  appError.NewErrFireOpsApi("failed to perform http request for events - %v", err),
 			}
 			return
 		}
@@ -123,6 +123,57 @@ func (f *FireOpsCoreApi) SendEvents(events []domain.Event) chan async.ActionResu
 			r <- async.ActionResult[any]{
 				Result: nil,
 				Error:  appError.NewErrFireOpsApi("failed to send events to fireops-core [StatusCode: %d]", resp.StatusCode),
+			}
+			return
+		}
+		// Success
+		r <- async.ActionResult[any]{
+			Result: nil,
+			Error:  nil,
+		}
+	}()
+	return r
+}
+
+// SendHealthReport implements IFireOpsCoreApi.
+func (f *FireOpsCoreApi) SendHealthReport(ctx context.Context, report []domain.Health) chan async.ActionResult[any] {
+	r := make(chan async.ActionResult[any])
+	go func() {
+		// Marshal HealthReport
+		body, err := json.Marshal(report)
+		if err != nil {
+			r <- async.ActionResult[any]{
+				Result: nil,
+				Error:  appError.NewErrDataParsing("failed to marshal health report to json - %v", err),
+			}
+			return
+		}
+		// Create Request context
+		rctx, cancel := context.WithTimeout(ctx, f.timeout)
+		defer cancel()
+		// Create HTTP request
+		req, err := http.NewRequestWithContext(rctx, "PUT", fmt.Sprintf("%s/api/v1/edge/health", f.baseUrl), bytes.NewBuffer(body))
+		if err != nil {
+			r <- async.ActionResult[any]{
+				Result: nil,
+				Error:  appError.NewErrInternal("failed to create http request for health report - %v", err),
+			}
+			return
+		}
+		// Do Request
+		resp, err := f.doRequest(req)
+		if err != nil {
+			r <- async.ActionResult[any]{
+				Result: nil,
+				Error:  appError.NewErrFireOpsApi("failed to perform http request for health report - %v", err),
+			}
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			r <- async.ActionResult[any]{
+				Result: nil,
+				Error:  appError.NewErrFireOpsApi("failed to send health report to fireops-core [StatusCode: %d]", resp.StatusCode),
 			}
 			return
 		}

@@ -55,7 +55,7 @@ func (c *CoreNotifier) run() error {
 			}
 			c.logger.Infof("New incomming events from alu2g: %s", string(msg.Result.Body))
 			for i := 0; i < c.retryLimit; i++ {
-				resp := <-c.fireOpsApi.SendEvents(events)
+				resp := <-c.fireOpsApi.SendEvents(c.ctx, events)
 				if resp.Error != nil {
 					c.logger.Errorf("failed to send alu2g events to fireops-core (Retry: %d) - %v", i, resp.Error)
 					continue

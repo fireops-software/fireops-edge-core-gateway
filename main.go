@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/fireops-software/fireops-edge-core-gateway/dal"
 	"github.com/fireops-software/fireops-edge-core-gateway/services"
@@ -16,6 +17,7 @@ import (
 const (
 	VERSION      = "{VERSION}"
 	SERVICE_NAME = "fireops-edge-core-gateway"
+	DISPLAY_NAME = "FireOPS"
 )
 
 func main() {
@@ -46,7 +48,7 @@ func main() {
 	)
 	// Run CoreGateway
 	alertsExchangeName := cp.StringOrDefault("RABBITMQ_EVENTS_EXCHANGE", "fireops-edge-events")
-	services.NewCoreGateway(
+	services.NewCoreEventGateway(
 		ctx,
 		logger,
 		rabbitMq,
@@ -79,17 +81,29 @@ func main() {
 			RoutingKey: cp.StringOrDefault("RABBITMQ_ALU2G_NEW_ROUTINGKEY", "alu2g.new"),
 		},
 	)
+	// Define health exchange
+	healthExchange := messaging.RabbitMqExchange{
+		Type:       "topic",
+		Exchange:   cp.StringOrDefault("RABBITMQ_HEALTH_EXCHANGE", "fireops-edge-health"),
+		RoutingKey: cp.StringOrDefault("RABBITMQ_HEALTH_ROUTING_KEY", ""),
+	}
+	// Run CoreHealthNotifier
+	services.NewCoreHealthNotifier(
+		ctx,
+		logger,
+		rabbitMq,
+		fireopsCoreApi,
+		healthExchange,
+		time.Duration(cp.UIntOrDefault("CORE_HEALTH_SEND_INTERVAL", 3600))*time.Second,
+	)
 	// Run HealthReporter
 	services.NewHealthReporter(
 		ctx,
 		logger,
 		rabbitMq,
-		messaging.RabbitMqExchange{
-			Type:       "topic",
-			Exchange:   cp.StringOrDefault("RABBITMQ_HEALTH_EXCHANGE", "fireops-edge-health"),
-			RoutingKey: cp.StringOrDefault("RABBITMQ_HEALTH_ROUTING_KEY", ""),
-		},
+		healthExchange,
 		SERVICE_NAME,
+		DISPLAY_NAME,
 	)
 	// Show run message
 	logger.Info("Running...")
