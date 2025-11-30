@@ -56,7 +56,7 @@ func main() {
 		messaging.RabbitMqExchange{
 			Type:       "topic",
 			Exchange:   alertsExchangeName,
-			RoutingKey: cp.StringOrDefault("RABBITMQ_ALU2G_ACTIVE_ROUTINGKEY", "alu2g.active"),
+			RoutingKey: cp.StringOrDefault("RABBITMQ_ALU2G_ROUTINGKEY", "alu2g"),
 		},
 		messaging.RabbitMqExchange{
 			Type:       "topic",
@@ -65,20 +65,13 @@ func main() {
 		},
 		messaging.RabbitMqExchange{
 			Type:       "topic",
-			Exchange:   cp.StringOrDefault("RABBITMQ_UNITS_EXCHANGE", "fireops-edge-units"),
-			RoutingKey: cp.StringOrDefault("RABBITMQ_UNITS_ROUTINGKEY", ""),
+			Exchange:   alertsExchangeName,
+			RoutingKey: cp.StringOrDefault("RABBITMQ_NEW_ROUTINGKEY", "new"),
 		},
-	)
-	// Run CoreNotifier
-	services.NewCoreNotifier(
-		ctx,
-		logger,
-		rabbitMq,
-		fireopsCoreApi,
 		messaging.RabbitMqExchange{
 			Type:       "topic",
-			Exchange:   alertsExchangeName,
-			RoutingKey: cp.StringOrDefault("RABBITMQ_ALU2G_NEW_ROUTINGKEY", "alu2g.new"),
+			Exchange:   cp.StringOrDefault("RABBITMQ_UNITS_EXCHANGE", "fireops-edge-units"),
+			RoutingKey: cp.StringOrDefault("RABBITMQ_UNITS_ROUTINGKEY", ""),
 		},
 	)
 	// Define health exchange

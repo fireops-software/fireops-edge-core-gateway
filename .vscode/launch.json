@@ -13,10 +13,10 @@
       "env": {
         "LOG_LEVEL": "TRACE",
         "RABBITMQ_HOST": "rabbitmq",
-        "RABBITMQ_USER": "guest",
-        "RABBITMQ_PW": "guest",
+        "RABBITMQ_USER": "fireops",
+        "RABBITMQ_PW": "fireops",
         "FIREOPS_BASE_URL": "https://einsatz.bfk-perg.at",
-        "FIREOPS_TOKEN": "<TOKEN>"
+        "FIREOPS_TOKEN": ""
       }
     }
   ]

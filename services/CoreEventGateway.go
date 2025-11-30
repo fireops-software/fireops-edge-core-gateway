@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/fireops-software/fireops-edge-core-gateway/dal"
@@ -22,17 +23,20 @@ import (
 //--------------------------------------------------------------------------------------------
 
 type CoreEventGateway struct {
-	ctx                context.Context
-	logger             log.ILogger
-	rabbitMq           messaging.IMessenger[messaging.RabbitMqExchange, amqp091.Delivery]
-	fireOpsApi         dal.IFireOpsCoreApi
-	excahngeAlu2Active messaging.RabbitMqExchange
-	exchangeActive     messaging.RabbitMqExchange
-	exchangeUnits      messaging.RabbitMqExchange
+	ctx            context.Context
+	logger         log.ILogger
+	rabbitMq       messaging.IMessenger[messaging.RabbitMqExchange, amqp091.Delivery]
+	fireOpsApi     dal.IFireOpsCoreApi
+	exchangeAlu2g  messaging.RabbitMqExchange
+	exchangeActive messaging.RabbitMqExchange
+	exchangeNew    messaging.RabbitMqExchange
+	exchangeUnits  messaging.RabbitMqExchange
 
 	lastSuccessfullPoll time.Time
 	alu2gCache          []domain.Event
 	coreCache           []domain.Event
+	mux                 sync.Mutex
+	eventBuffer         *utils.RingBuffer[string]
 
 	retryInterval       time.Duration
 	fireopsPollInterval time.Duration
@@ -48,11 +52,9 @@ type CoreEventGateway struct {
 
 func (c *CoreEventGateway) run() error {
 	// Subscribe alu2g
-	alu2g := c.rabbitMq.Subscribe(c.excahngeAlu2Active)
+	alu2g := c.rabbitMq.Subscribe(c.exchangeAlu2g)
 	defer c.rabbitMq.Unsubscribe(alu2g)
-	// Create ticker for fireops API polling
-	ticker := time.NewTicker(c.fireopsPollInterval)
-
+	// Run service
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -62,7 +64,7 @@ func (c *CoreEventGateway) run() error {
 			if err := c.processAlu2gMsg(alu2gMsg); err != nil {
 				return err
 			}
-		case <-ticker.C:
+		case <-time.Tick(c.fireopsPollInterval):
 			// Request from Core api
 			coreMsg := <-c.fireOpsApi.GetFireDepState(c.ctx)
 			// Process message
@@ -89,7 +91,8 @@ func (c *CoreEventGateway) processAlu2gMsg(msg async.ActionResult[amqp091.Delive
 	// Update cache
 	c.alu2gCache = alu2gEvents
 	// Notify
-	return c.notifyEvents()
+	c.notifyEvents()
+	return nil
 }
 
 func (c *CoreEventGateway) processCoreMsg(msg async.ActionResult[domain.FireDepState]) error {
@@ -101,14 +104,14 @@ func (c *CoreEventGateway) processCoreMsg(msg async.ActionResult[domain.FireDepS
 	c.logger.Debugf("New incomming data from fireops-core: %s", utils.MustJsonStr(msg.Result))
 	c.coreCache = msg.Result.Events
 	// Notify
-	if err := c.notifyEvents(); err != nil {
-		return err
-	}
+	c.notifyEvents()
 	// Notify Units
 	return c.rabbitMq.Publish(c.exchangeUnits, msg.Result.Units)
 }
 
-func (c *CoreEventGateway) notifyEvents() error {
+func (c *CoreEventGateway) notifyEvents() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	// Merge events
 	events := append([]domain.Event{}, c.coreCache...)
 	for _, alu2gEvent := range c.alu2gCache {
@@ -118,8 +121,40 @@ func (c *CoreEventGateway) notifyEvents() error {
 			events = append(events, alu2gEvent)
 		}
 	}
-	// Send to rabbitMq
-	return c.rabbitMq.Publish(c.exchangeActive, events)
+	// Check for new events
+	newEvents := collections.FilterSlice(events, func(e domain.Event) bool {
+		if e.Num1 == nil || c.eventBuffer.Contains(*e.Num1) {
+			return false
+		}
+		c.eventBuffer.Push(*e.Num1)
+		return e.FullChain == nil || *e.FullChain
+	})
+	newEventIds := collections.MapSlice(newEvents, func(e domain.Event) string {
+		if e.Num1 != nil {
+			return *e.Num1
+		} else {
+			return ""
+		}
+	})
+	if len(newEvents) > 0 {
+		// Notify FireOPS
+		fireOpsResponse := c.fireOpsApi.SendEvents(c.ctx, newEvents)
+		// Publish on rabbitmq
+		if err := c.rabbitMq.Publish(c.exchangeNew, newEvents); err != nil {
+			c.logger.Error(err.Error())
+		}
+		c.logger.Debugf("Successfully published new events (%v) on rabbitmq", newEventIds)
+		// Wait for fireops response
+		if r := <-fireOpsResponse; r.Error != nil {
+			c.logger.Error(r.Error.Error())
+		}
+		c.logger.Debugf("Successfully notified fireops about new events (%v)", newEventIds)
+	}
+	// Send active events to rabbitMq
+	if err := c.rabbitMq.Publish(c.exchangeActive, events); err != nil {
+		c.logger.Error(err.Error())
+	}
+	c.logger.Debugf("Successfully published active events on rabbitmq")
 }
 
 //--------------------------------------------------------------------------------------------
@@ -131,23 +166,27 @@ func NewCoreEventGateway(
 	logger log.ILogger,
 	rabbitMq messaging.IMessenger[messaging.RabbitMqExchange, amqp091.Delivery],
 	fireOpsApi dal.IFireOpsCoreApi,
-	excahngeAlu2Active messaging.RabbitMqExchange,
+	exchangeAlu2g messaging.RabbitMqExchange,
 	exchangeActive messaging.RabbitMqExchange,
+	exchangeNew messaging.RabbitMqExchange,
 	exchangeUnits messaging.RabbitMqExchange,
 	opts ...func(*CoreEventGateway)) *CoreEventGateway {
 
 	cg := &CoreEventGateway{
-		ctx:                ctx,
-		logger:             logger,
-		rabbitMq:           rabbitMq,
-		fireOpsApi:         fireOpsApi,
-		excahngeAlu2Active: excahngeAlu2Active,
-		exchangeActive:     exchangeActive,
-		exchangeUnits:      exchangeUnits,
+		ctx:            ctx,
+		logger:         logger,
+		rabbitMq:       rabbitMq,
+		fireOpsApi:     fireOpsApi,
+		exchangeAlu2g:  exchangeAlu2g,
+		exchangeActive: exchangeActive,
+		exchangeNew:    exchangeNew,
+		exchangeUnits:  exchangeUnits,
 
 		lastSuccessfullPoll: time.Time{},
 		alu2gCache:          []domain.Event{},
 		coreCache:           []domain.Event{},
+		mux:                 sync.Mutex{},
+		eventBuffer:         utils.NewRingBuffer[string](50),
 
 		retryInterval:       10 * time.Second,
 		fireopsPollInterval: 30 * time.Second,
