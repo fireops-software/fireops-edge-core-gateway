@@ -127,7 +127,7 @@ func (c *CoreEventGateway) notifyEvents() {
 			return false
 		}
 		c.eventBuffer.Push(*e.Num1)
-		return e.FullChain == nil || *e.FullChain
+		return e.FullChain != nil && *e.FullChain
 	})
 	newEventIds := collections.MapSlice(newEvents, func(e domain.Event) string {
 		if e.Num1 != nil {

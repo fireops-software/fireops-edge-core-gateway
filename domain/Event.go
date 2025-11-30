@@ -25,6 +25,5 @@ type Event struct {
 		Accepted []string `json:"accepted"`
 		Declined []string `json:"declined"`
 	} `json:"user_responses"`
-	// This field is just for online version
-	FullChain *bool `json:"fullChain,omitempty"`
+	FullChain *bool `json:"fullChain"`
 }
