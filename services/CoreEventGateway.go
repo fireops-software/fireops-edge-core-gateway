@@ -54,6 +54,9 @@ func (c *CoreEventGateway) run() error {
 	// Subscribe alu2g
 	alu2g := c.rabbitMq.Subscribe(c.exchangeAlu2g)
 	defer c.rabbitMq.Unsubscribe(alu2g)
+	// Create ticker once
+	ticker := time.NewTicker(c.fireopsPollInterval)
+	defer ticker.Stop()
 	// Run service
 	for {
 		select {
@@ -64,7 +67,7 @@ func (c *CoreEventGateway) run() error {
 			if err := c.processAlu2gMsg(alu2gMsg); err != nil {
 				return err
 			}
-		case <-time.Tick(c.fireopsPollInterval):
+		case <-ticker.C:
 			// Request from Core api
 			coreMsg := <-c.fireOpsApi.GetFireDepState(c.ctx)
 			// Process message
