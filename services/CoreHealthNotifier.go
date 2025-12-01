@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
-	"reflect"
 	"slices"
 	"time"
 
@@ -36,7 +35,7 @@ func (c *CoreHealthNotifier) updateServiceState(serviceHealth domain.Health) boo
 		c.cache[serviceHealth.ServiceName] = serviceHealth
 		return true
 	}
-	if serviceHealthCache.State != serviceHealth.State || !reflect.DeepEqual(serviceHealthCache.Errors, serviceHealth.Errors) {
+	if serviceHealthCache.State != serviceHealth.State {
 		c.cache[serviceHealth.ServiceName] = serviceHealth
 		return true
 	}
@@ -52,15 +51,18 @@ func (c *CoreHealthNotifier) sendHealthReport() {
 			continue
 		}
 		c.logger.Infof("Successfully sent health report to fireops-core api")
-		c.lastUpdateSent = time.Now()
 		break
 	}
+	c.lastUpdateSent = time.Now()
 }
 
 func (c *CoreHealthNotifier) run() error {
 	// Subscribe to health exchange
 	healthSrc := c.rabbitMq.Subscribe(c.healthExchange)
 	defer c.rabbitMq.Unsubscribe(healthSrc)
+	// Create ticker once
+	ticker := time.NewTicker(c.cyclicNotificationInterval)
+	defer ticker.Stop()
 	// Listen for health messages
 	for {
 		select {
@@ -81,7 +83,7 @@ func (c *CoreHealthNotifier) run() error {
 			if c.updateServiceState(serviceHealth) {
 				c.sendHealthReport()
 			}
-		case <-time.Tick(c.cyclicNotificationInterval):
+		case <-ticker.C:
 			if time.Since(c.lastUpdateSent) > c.cyclicNotificationInterval {
 				c.sendHealthReport()
 			}
