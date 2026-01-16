@@ -186,6 +186,57 @@ func (f *FireOpsCoreApi) SendHealthReport(ctx context.Context, report []domain.H
 	return r
 }
 
+// GetWaterExtractionPoints implements [IFireOpsCoreApi].
+func (f *FireOpsCoreApi) GetWaterExtractionPoints(ctx context.Context, radius float32, lastUpdate time.Time) <-chan async.ActionResult[[]domain.WaterExtractionPoint] {
+	r := make(chan async.ActionResult[[]domain.WaterExtractionPoint])
+	go func() {
+		// Create Request context
+		rctx, cancel := context.WithTimeout(ctx, f.timeout)
+		defer cancel()
+		// Create HTTP request
+		req, err := http.NewRequestWithContext(
+			rctx,
+			"GET",
+			fmt.Sprintf(
+				"%s/api/v1/user/firedepartment/waterExtractionPoints?radius=%v&lastUpdate=%s",
+				f.baseUrl,
+				radius,
+				lastUpdate.Format("2006-01-02"),
+			), nil)
+		if err != nil {
+			r <- async.NewErrorActionResult[[]domain.WaterExtractionPoint](appError.NewErrInternal("failed to create http request for water extraction points - %v", err))
+			return
+		}
+		// Do request
+		resp, err := f.doRequest(req)
+		if err != nil {
+			r <- async.NewErrorActionResult[[]domain.WaterExtractionPoint](appError.NewErrFireOpsApi("failed to get water extration points from fireops - %v", err))
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			r <- async.NewErrorActionResult[[]domain.WaterExtractionPoint](appError.NewErrFireOpsApi("failed to get water extration points from fireops [StatusCode: %d]", resp.StatusCode))
+			return
+		}
+		// Parse body
+		rawBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			r <- async.NewErrorActionResult[[]domain.WaterExtractionPoint](appError.NewErrFireOpsApi("failed to read response body for water extration points - %v", err))
+			return
+		}
+		waterExtractionPoints := []domain.WaterExtractionPoint{}
+		if err := json.Unmarshal(rawBody, &waterExtractionPoints); err != nil {
+			r <- async.NewErrorActionResult[[]domain.WaterExtractionPoint](appError.NewErrFireOpsApi("failed to marshal body of water extraction points - %v", err))
+			return
+		}
+		// Return successfull result
+		r <- async.ActionResult[[]domain.WaterExtractionPoint]{
+			Result: waterExtractionPoints,
+		}
+	}()
+	return r
+}
+
 //--------------------------------------------------------------------------------------------
 // Private
 //--------------------------------------------------------------------------------------------

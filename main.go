@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"os"
+	"fmt"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/fireops-software/fireops-edge-core-gateway/dal"
 	"github.com/fireops-software/fireops-edge-core-gateway/services"
+	"github.com/redis/go-redis/v9"
 	"github.com/uoul/go-common/config"
 	"github.com/uoul/go-common/log"
 	"github.com/uoul/go-common/messaging"
@@ -22,7 +23,8 @@ const (
 
 func main() {
 	// Create AppCtx
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+	defer cancel()
 	// Create ConfigProvider
 	cp := config.NewEnvVarProvider()
 	// Create Logger
@@ -45,6 +47,25 @@ func main() {
 	fireopsCoreApi := dal.NewFireOpsCoreApi(
 		cp.StringOrDefault("FIREOPS_BASE_URL", ""),
 		cp.StringOrDefault("FIREOPS_TOKEN", ""),
+	)
+	// Create redis clinet
+	redisDb := redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf(
+			"%s:%d",
+			cp.StringOrDefault("REDIS_HOST", "localhost"),
+			cp.Int16OrDefault("REDIS_PORT", 6379),
+		),
+		Username: cp.StringOrDefault("REDIS_USER", ""),
+		Password: cp.StringOrDefault("REDIS_PW", ""),
+		DB:       cp.IntOrDefault("REDIS_DB", 0),
+	})
+	// Run WaterMapClient
+	waterMapClient := services.NewWaterMapClient(
+		ctx,
+		logger,
+		fireopsCoreApi,
+		redisDb,
+		services.WithWaterMapClientCacheRadius(cp.UIntOrDefault("WATERMAP_CACHE_RADIUS", 20000)),
 	)
 	// Run CoreGateway
 	alertsExchangeName := cp.StringOrDefault("RABBITMQ_EVENTS_EXCHANGE", "fireops-edge-events")
@@ -73,6 +94,8 @@ func main() {
 			Exchange:   cp.StringOrDefault("RABBITMQ_UNITS_EXCHANGE", "fireops-edge-units"),
 			RoutingKey: cp.StringOrDefault("RABBITMQ_UNITS_ROUTINGKEY", ""),
 		},
+		waterMapClient,
+		services.WithCoreGatewayEventRadius(cp.UIntOrDefault("WATERMAP_EVENT_RADIUS", 500)),
 	)
 	// Define health exchange
 	healthExchange := messaging.RabbitMqExchange{
@@ -98,12 +121,9 @@ func main() {
 		SERVICE_NAME,
 		DISPLAY_NAME,
 	)
-	// Show run message
-	logger.Info("Running...")
+
 	// Wait until stop
-	osSig := make(chan os.Signal, 1)
-	signal.Notify(osSig, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	<-osSig
-	cancel()
+	logger.Info("Running...")
+	<-ctx.Done()
 	logger.Info("Shutting down...")
 }

@@ -31,6 +31,7 @@ type CoreEventGateway struct {
 	exchangeActive messaging.RabbitMqExchange
 	exchangeNew    messaging.RabbitMqExchange
 	exchangeUnits  messaging.RabbitMqExchange
+	waterMapClient *WaterMapClient
 
 	lastSuccessfullPoll time.Time
 	alu2gCache          []domain.Event
@@ -38,8 +39,9 @@ type CoreEventGateway struct {
 	mux                 sync.Mutex
 	eventBuffer         *utils.RingBuffer[string]
 
-	retryInterval       time.Duration
-	fireopsPollInterval time.Duration
+	retryInterval              time.Duration
+	fireopsPollInterval        time.Duration
+	waterExtractionPointRadius float64
 }
 
 //--------------------------------------------------------------------------------------------
@@ -94,7 +96,7 @@ func (c *CoreEventGateway) processAlu2gMsg(msg async.ActionResult[amqp091.Delive
 	// Update cache
 	c.alu2gCache = alu2gEvents
 	// Notify
-	c.notifyEvents()
+	c.notifyEvents(c.ctx)
 	return nil
 }
 
@@ -107,12 +109,12 @@ func (c *CoreEventGateway) processCoreMsg(msg async.ActionResult[domain.FireDepS
 	c.logger.Debugf("New incomming data from fireops-core: %s", utils.MustJsonStr(msg.Result))
 	c.coreCache = msg.Result.Events
 	// Notify
-	c.notifyEvents()
+	c.notifyEvents(c.ctx)
 	// Notify Units
 	return c.rabbitMq.Publish(c.exchangeUnits, msg.Result.Units)
 }
 
-func (c *CoreEventGateway) notifyEvents() {
+func (c *CoreEventGateway) notifyEvents(ctx context.Context) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	// Merge events
@@ -124,40 +126,56 @@ func (c *CoreEventGateway) notifyEvents() {
 			events = append(events, alu2gEvent)
 		}
 	}
-	// Check for new events
-	newEvents := collections.FilterSlice(events, func(e domain.Event) bool {
-		if e.Num1 == nil || c.eventBuffer.Contains(*e.Num1) {
-			return false
+	// Enrich even with water extraction points
+	for i, e := range events {
+		if e.Num1 != nil && e.Latitude != nil && e.Longitude != nil {
+			wep, err := c.waterMapClient.GetWaterExtractionPoints(ctx, *e.Latitude, *e.Longitude, c.waterExtractionPointRadius)
+			if err != nil {
+				c.logger.Warningf("failed to get water extraction points for %s - %v", *e.Num1, err)
+			}
+			events[i].WaterExtractionPoints = wep
 		}
-		c.eventBuffer.Push(*e.Num1)
-		return e.FullChain != nil && *e.FullChain
-	})
-	newEventIds := collections.MapSlice(newEvents, func(e domain.Event) string {
-		if e.Num1 != nil {
-			return *e.Num1
-		} else {
-			return ""
-		}
-	})
-	if len(newEvents) > 0 {
-		// Notify FireOPS
-		fireOpsResponse := c.fireOpsApi.SendEvents(c.ctx, newEvents)
-		// Publish on rabbitmq
-		if err := c.rabbitMq.Publish(c.exchangeNew, newEvents); err != nil {
-			c.logger.Error(err.Error())
-		}
-		c.logger.Debugf("Successfully published new events (%v) on rabbitmq", newEventIds)
-		// Wait for fireops response
-		if r := <-fireOpsResponse; r.Error != nil {
-			c.logger.Error(r.Error.Error())
-		}
-		c.logger.Debugf("Successfully notified fireops about new events (%v)", newEventIds)
 	}
+	// Check for new events
+	//newEvents := collections.FilterSlice(events, func(e domain.Event) bool {
+	//	if e.Num1 == nil || c.eventBuffer.Contains(*e.Num1) {
+	//		return false
+	//	}
+	//	c.eventBuffer.Push(*e.Num1)
+	//	return e.FullChain != nil && *e.FullChain
+	//})
+	//newEventIds := collections.MapSlice(newEvents, func(e domain.Event) string {
+	//	if e.Num1 != nil {
+	//		return *e.Num1
+	//	} else {
+	//		return ""
+	//	}
+	//})
+	//if len(newEvents) > 0 {
+	//	// Notify FireOPS
+	//	fireOpsResponse := c.fireOpsApi.SendEvents(c.ctx, newEvents)
+	//	// Publish on rabbitmq
+	//	if err := c.rabbitMq.Publish(c.exchangeNew, newEvents); err != nil {
+	//		c.logger.Error(err.Error())
+	//	}
+	//	c.logger.Debugf("Successfully published new events (%v) on rabbitmq", newEventIds)
+	//	// Wait for fireops response
+	//	if r := <-fireOpsResponse; r.Error != nil {
+	//		c.logger.Error(r.Error.Error())
+	//	}
+	//	c.logger.Debugf("Successfully notified fireops about new events (%v)", newEventIds)
+	//}
 	// Send active events to rabbitMq
 	if err := c.rabbitMq.Publish(c.exchangeActive, events); err != nil {
 		c.logger.Error(err.Error())
 	}
 	c.logger.Debugf("Successfully published active events on rabbitmq")
+}
+
+func WithCoreGatewayEventRadius(r uint) func(*CoreEventGateway) {
+	return func(ceg *CoreEventGateway) {
+		ceg.waterExtractionPointRadius = float64(r) / 1000.0
+	}
 }
 
 //--------------------------------------------------------------------------------------------
@@ -173,6 +191,7 @@ func NewCoreEventGateway(
 	exchangeActive messaging.RabbitMqExchange,
 	exchangeNew messaging.RabbitMqExchange,
 	exchangeUnits messaging.RabbitMqExchange,
+	waterMapClient *WaterMapClient,
 	opts ...func(*CoreEventGateway)) *CoreEventGateway {
 
 	cg := &CoreEventGateway{
@@ -184,6 +203,7 @@ func NewCoreEventGateway(
 		exchangeActive: exchangeActive,
 		exchangeNew:    exchangeNew,
 		exchangeUnits:  exchangeUnits,
+		waterMapClient: waterMapClient,
 
 		lastSuccessfullPoll: time.Time{},
 		alu2gCache:          []domain.Event{},
@@ -191,8 +211,9 @@ func NewCoreEventGateway(
 		mux:                 sync.Mutex{},
 		eventBuffer:         utils.NewRingBuffer[string](50),
 
-		retryInterval:       10 * time.Second,
-		fireopsPollInterval: 30 * time.Second,
+		retryInterval:              10 * time.Second,
+		fireopsPollInterval:        30 * time.Second,
+		waterExtractionPointRadius: 1.0,
 	}
 	for _, o := range opts {
 		o(cg)

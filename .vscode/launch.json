@@ -16,8 +16,10 @@
         "RABBITMQ_USER": "fireops",
         "RABBITMQ_PW": "fireops",
         "FIREOPS_BASE_URL": "https://einsatz.bfk-perg.at",
-        "FIREOPS_TOKEN": ""
+        "FIREOPS_TOKEN": "",
+        "REDIS_HOST": "redis",
       }
     }
   ]
 }
+

@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 type Event struct {
 	Eid               *int     `json:"eid"`
 	Num1              *string  `json:"num_1"`
@@ -25,5 +27,27 @@ type Event struct {
 		Accepted []string `json:"accepted"`
 		Declined []string `json:"declined"`
 	} `json:"user_responses"`
-	FullChain *bool `json:"fullChain"`
+	FullChain             *bool                  `json:"fullChain"`
+	WaterExtractionPoints []WaterExtractionPoint `json:"waterExtractionPoints"`
+}
+
+type WaterExtractionPoint struct {
+	Id       int     `json:"id"`
+	Title    *string `json:"title"`
+	Geometry *struct {
+		Type        *string   `json:"type"`
+		Coordinates []float64 `json:"coordinates"`
+	}
+	ObjectType       *string    `json:"objtype"`
+	ObjectSubType    *string    `json:"objsubtype"`
+	AdditionalInfo   *string    `json:"additional_info"`
+	FireDepartmentId *int       `json:"firedepartment_id"`
+	MunicipalityId   *int       `json:"municipality_id"`
+	SectorId         *int       `json:"sector_id"`
+	DistrictId       *int       `json:"district_id"`
+	CreatedAt        *time.Time `json:"created_at"`
+	UpdatedAt        *time.Time `json:"updated_at"`
+	HashCode         *string    `json:"hashcode"`
+
+	DistanceToEventLocationKm *float64 `json:"distanceToEventLocationKm,omitempty"`
 }
