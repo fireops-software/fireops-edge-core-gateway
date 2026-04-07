@@ -1,6 +1,6 @@
 module github.com/fireops-software/fireops-edge-core-gateway
 
-go 1.24.2
+go 1.25.0
 
 require (
 	github.com/rabbitmq/amqp091-go v1.10.0
@@ -31,6 +31,7 @@ require (
 	github.com/quic-go/quic-go v0.55.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
+	github.com/uoul/go-collections v1.0.1 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
