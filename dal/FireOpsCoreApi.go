@@ -22,7 +22,8 @@ type FireOpsCoreApi struct {
 	baseUrl  string
 	apiToken string
 
-	timeout time.Duration
+	timeout    time.Duration
+	httpClient *http.Client
 }
 
 //--------------------------------------------------------------------------------------------
@@ -71,7 +72,7 @@ func (f *FireOpsCoreApi) GetFireDepState(ctx context.Context) chan async.ActionR
 		err = json.Unmarshal(body, &fireDepState)
 		if err != nil {
 			r <- async.ActionResult[domain.FireDepState]{
-				Error: appError.NewErrDataParsing("failed to parse FireDepState from fireops-core-api - %v", err),
+				Error: appError.NewErrDataParsing("failed to parse FireDepState from fireops-core-api (%.100s) - %v", string(body), err),
 			}
 			return
 		}
@@ -195,7 +196,7 @@ func (f *FireOpsCoreApi) doRequest(req *http.Request) (*http.Response, error) {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", f.apiToken))
 	// Do request
-	return http.DefaultClient.Do(req)
+	return f.httpClient.Do(req)
 }
 
 //--------------------------------------------------------------------------------------------
@@ -207,6 +208,9 @@ func NewFireOpsCoreApi(baseUrl string, apiToken string) IFireOpsCoreApi {
 		baseUrl:  baseUrl,
 		apiToken: apiToken,
 
-		timeout: 10 * time.Second,
+		timeout: 12 * time.Second,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
 	}
 }
