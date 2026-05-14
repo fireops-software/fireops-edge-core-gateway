@@ -48,6 +48,13 @@ The following json is an example of the dataformat, that the service will publis
     "longitude": null,
     "caller_name": "Andreas Maier",
     "caller_number": "+55 676 4445566",
+    "alerted_units": [
+      {
+        "unid_long": "TANK Buxdrihudi",
+        "s_name": "Buxdrihudi",
+        "unityp": "RLF-2"
+      }
+    ],
     "destinations": [
       {
         "id": 70001,
