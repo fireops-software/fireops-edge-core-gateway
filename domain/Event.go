@@ -22,9 +22,10 @@ type Event struct {
 		Name string `json:"name"`
 	} `json:"destinations"`
 	AlertedUnits []struct {
-		UnidLong string `json:"unid_long"`
-		SName    string `json:"s_name"`
-		UniTyp   string `json:"unityp"`
+		UnidLong *string `json:"unid_long"`
+		SName    *string `json:"s_name"`
+		UniTyp   *string `json:"unityp"`
+		Priority *int    `json:"priority"`
 	} `json:"alerted_units"`
 	UserResponses struct {
 		Accepted []string `json:"accepted"`
